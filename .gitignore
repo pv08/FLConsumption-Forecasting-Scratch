@@ -1,4 +1,5 @@
 /dataset/
 /.idea/
+/wandb/
 *.ipynb
 *.csv

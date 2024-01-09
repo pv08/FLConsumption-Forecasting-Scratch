@@ -1,6 +1,7 @@
 import copy
 import torch as T
 import torch.nn as nn
+import wandb
 import time
 import numpy as np
 from collections import OrderedDict
@@ -25,13 +26,14 @@ class Server:
                  weighted_metrics_fn: Optional[Callable]=None,
                  val_loader: Optional[DataLoader]=None,
                  local_params_fn: Optional[Callable]=None,
-                 server_model=None):
+                 server_model=None,
+                 server_config: Optional[OrderedDict[str, any]]=None):
 
         self.global_model = None
         self.best_model = None
         self.server_model = server_model
         self.best_loss, self.best_epoch = np.inf, -1
-
+        self.server_config = server_config
         self.client_proxies = client_proxies
         self._initialize_client_manager(client_manager)
 
@@ -63,6 +65,7 @@ class Server:
     def fit(self, num_rounds: int, fraction: float, fraction_args: Optional[Callable]=None,
             use_carbotracker: bool=False) -> Tuple[List[np.ndarray], History]:
         history = History()
+
         self.evaluate_round(fl_round=0, history=history)
         log(INFO, "Starting FL rounds")
 
@@ -165,6 +168,7 @@ class Server:
 
         else:
             log(INFO, f"Evaluating global model in round: {fl_round}")
+
             for cid, client_proxy in (pbar := tqdm(self.client_manager.all().items(), total=len(self.client_manager))):
                 num_train_instances, train_loss, train_eval_metrics = client_proxy.evaluate(model=self.global_model, method="train")
                 num_train_examples.append(num_train_instances)
@@ -196,6 +200,8 @@ class Server:
             fl_model_serializer.save('federated_model.h5')
 
         history.add_global_test_metrics(self.weighted_metrics(num_test_examples, test_metrics))
+
+
 
     def _get_initial_model(self) -> List[np.ndarray]:
         """Get initial params from a random client"""

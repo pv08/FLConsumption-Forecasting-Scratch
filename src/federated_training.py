@@ -34,7 +34,6 @@ class FederatedTraining(Trainers):
         input_dim, exogenous_dim = processing.get_input_dims(self.X_train, self.exogenous_data_train)
 
         print(input_dim, exogenous_dim)
-
         self.model = self.get_model(model=args.model_name,
                           input_dim=input_dim,
                           out_dim=self.y_train.shape[1],
@@ -99,7 +98,7 @@ class FederatedTraining(Trainers):
         server = Server(client_proxies=client_proxies,
                         aggregation=self.args.aggregation,
                         aggregation_params=aggregation_params,
-                        local_params_fn=None, server_model=self.model)
+                        local_params_fn=None, server_model=self.model, server_config=self.args)
 
         model_params, history = server.fit(self.args.fl_rounds, self.args.fraction, use_carbotracker=use_carbontracker)
         params_dict = zip(self.model.state_dict().keys(), model_params)
