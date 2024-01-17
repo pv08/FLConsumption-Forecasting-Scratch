@@ -54,7 +54,7 @@ def main():
 
     trainer = FederatedTraining(args=args)
     global_model, history = trainer.fit(local_train_params=local_train_params)
-    history.save_in_json()
+    history.save_in_json(model_name=args.model_name)
     print(history)
     plot_global_losses(history.global_test_losses)
     plot_global_metrics(history.global_test_metrics)
