@@ -93,7 +93,7 @@ class TorchRegressionClient(Client):
             data = self.train_loader
 
         loss, mse, rmse, mae, r2, nrmse = Trainers(args=None).test(self.net, data, params["criterion"], device=self.device)
-        metrics = {"MSE": mse, "RMSE": rmse, "MAE": mae, 'R^2': r2, "NRMSE": nrmse}
+        metrics = {"MSE": float(mse), "RMSE": float(rmse), "MAE": float(mae), 'R^2': float(r2), "NRMSE": float(nrmse)}
 
         if verbose:
             log(INFO, f"[Client {self.cid} Evaluation on {len(data.dataset)} samples] "
@@ -104,12 +104,12 @@ class TorchRegressionClient(Client):
     def fit(self, model: Optional[Union[nn.Module, List[np.ndarray]]], cid: str):
         if model is not None:
             self.set_parameters(model)
-        self.net: nn.Module = Trainers(args=None).train(model=self.net, train_loader=self.train_loader,
-                                                        test_loader=self.val_loader, epochs=self.epochs,
-                                                        optimizer=self.optimizer, lr=self.lr, criterion=self.criterion,
-                                                        early_stopping=self.early_stopping, patience=self.patience,
-                                                        reg1=self.reg1, reg2=self.reg2, max_grad_norm=self.max_grad_norm,
-                                                        fedprox_mu=self.fed_prox_mu, log_per=10, cid=cid)
+            self.net: nn.Module = Trainers(args=None).train(model=self.net, train_loader=self.train_loader,
+                                                            test_loader=self.val_loader, epochs=self.epochs,
+                                                            optimizer=self.optimizer, lr=self.lr, criterion=self.criterion,
+                                                            early_stopping=self.early_stopping, patience=self.patience,
+                                                            reg1=self.reg1, reg2=self.reg2, max_grad_norm=self.max_grad_norm,
+                                                            fedprox_mu=self.fed_prox_mu, log_per=10, cid=cid)
         _, train_loss, train_metrics = self.evaluate(self.train_loader)
         num_test, test_loss, test_metrics = self.evaluate(self.val_loader)
 

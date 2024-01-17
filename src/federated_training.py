@@ -1,5 +1,6 @@
 import copy
 import torch as T
+import wandb
 from collections import OrderedDict
 from src.base.trainers import Trainers
 from src.fl.federated_learning import FederatedLearning
@@ -11,7 +12,8 @@ from src.fl.server.server import Server
 class FederatedTraining(Trainers):
     def __init__(self, args):
         super(FederatedTraining, self).__init__(args=args)
-
+        self.wandb_logger = wandb.init(project='FL-ConsumptionForecasting-Scratch', config=self.args,
+                                       tags=['FL', 'consumption', self.args.model_name], group='Federated', name=f"{self.args.model_name}_Federated")
         self.seed_all(args.seed)
         processing = Processsing(args=self.args, data_path=self.args.data_path)
 
@@ -98,7 +100,7 @@ class FederatedTraining(Trainers):
         server = Server(client_proxies=client_proxies,
                         aggregation=self.args.aggregation,
                         aggregation_params=aggregation_params,
-                        local_params_fn=None, server_model=self.model, server_config=self.args)
+                        local_params_fn=None, server_model=self.model, server_config=self.args, logger=self.wandb_logger)
 
         model_params, history = server.fit(self.args.fl_rounds, self.args.fraction, use_carbotracker=use_carbontracker)
         params_dict = zip(self.model.state_dict().keys(), model_params)

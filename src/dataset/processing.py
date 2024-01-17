@@ -8,7 +8,6 @@ from src.dataset.participant_preprocessing import ParticipantData
 from abc import ABC, abstractmethod
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler, MaxAbsScaler
-from scipy.stats.mstats import gmean
 from src.utils.logger import log
 from logging import INFO
 from typing import List, Dict, Tuple, Any, Union, Optional
@@ -140,38 +139,46 @@ class Data(ABC):
             return train_data, val_data
         return train_data
 
-    def to_train_val(self, df: pd.DataFrame, train_size: float=.8, identifier: str='cid'):
+    def to_train_val(self, df: pd.DataFrame, train_size: float=.7, identifier: str='cid'):
         if df[identifier].nunique() != 1:
-            train_data, val_data = [], []
+            train_data, val_data, test_data = [], [], []
             for area in df[identifier].unique():
                 area_data = df.loc[df[identifier] == area]
                 num_samples_train = math.ceil(train_size * len(area_data))
                 area_train_data = area_data[:num_samples_train]
-                area_val_data = area_data[num_samples_train:]
+                area_val_data = area_data[num_samples_train: int(len(area_data) * (1.1 - .2))]
+                area_test_data = area_data[int(len(area_data) * (1.0 - .1)):]
                 train_data.append(area_train_data)
                 val_data.append(area_val_data)
+                test_data.append(area_test_data)
                 log(INFO, f"Observations info in {area}")
                 log(INFO, f"\tTotal number of samples:  {len(area_data)}")
                 log(INFO, f"\tNumber of samples for training: {num_samples_train}")
-                log(INFO, f"\tNumber of samples for validation:  {len(area_data) - num_samples_train}")
+                log(INFO, f"\tNumber of samples for validation:  {len(area_val_data)}")
+                log(INFO, f"\tNumber of samples for testing:  {len(area_test_data)}")
             train_data = pd.concat(train_data)
             val_data = pd.concat(val_data)
+            test_data = pd.concat(test_data)
             log(INFO, "Observations info using all data")
-            log(INFO, f"\tTotal number of samples:  {len(train_data) + len(val_data)}")
+            log(INFO, f"\tTotal number of samples:  {len(train_data) + len(val_data) + len(test_data)}")
             log(INFO, f"\tNumber of samples for training: {len(train_data)}")
             log(INFO, f"\tNumber of samples for validation:  {len(val_data)}")
+            log(INFO, f"\tNumber of samples for testing:  {len(test_data)}")
         else:
             num_samples_train = math.ceil(train_size * len(df))
+            train_data = df[:num_samples_train]
+            val_data = df[num_samples_train: int(len(df) * (1.1 - .2))]
+            test_data = df[int(len(df) * (1.0 - .1)):]
+
             log(INFO, f"\tTotal number of samples:  {len(df)}")
             log(INFO, f"\tNumber of samples for training: {num_samples_train}")
-            log(INFO, f"\tNumber of samples for validation:  {len(df) - num_samples_train}")
-            train_data = df[:num_samples_train]
-            val_data = df[num_samples_train:]
+            log(INFO, f"\tNumber of samples for validation:  {len(val_data)}")
+            log(INFO, f"\tNumber of samples for testing:  {len(test_data)}")
 
-        return train_data, val_data
+        return train_data, val_data, test_data
     def handle_outliers(self, df: pd.DataFrame,
                         columns: List[str] = ["down", "up"],
-                        identifier: str = "District",
+                        identifier: str = "cid",
                         kwargs: Dict[str, Tuple] = {"ElBorn": (10, 90), "LesCorts": (10, 90), "PobleSec": (10, 90)},
                         exclude: List[str] = None) -> pd.DataFrame:
         log(INFO, f"Using Flooring and Capping and with params: {kwargs}")
@@ -197,6 +204,7 @@ class Data(ABC):
     def to_Xy(self, train_data: pd.DataFrame,
               targets: List[str],
               val_data: Optional[pd.DataFrame] = None,
+              test_data: Optional[pd.DataFrame] = None,
               ignore_cols: Optional[List[str]] = None,
               identifier: str = "cid") -> Union[
         Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame], Tuple[pd.DataFrame, pd.DataFrame]]:
@@ -208,9 +216,14 @@ class Data(ABC):
 
         y_train = train_data[targets]
 
+
         y_val = None
+        y_test = None
+
         if val_data is not None:
             y_val = val_data[targets]
+        if test_data is not None:
+            y_test = test_data[targets]
 
         if ignore_cols is None:
             ignore_cols = []
@@ -228,20 +241,23 @@ class Data(ABC):
 
         if val_data is not None:
             X_val = val_data
+            X_test = test_data
             if ignore_cols is not None and len(ignore_cols) > 0 and next(iter(ignore_cols)) is not None:
                 cols = X_val.columns
                 for ignore_col in ignore_cols:
                     if ignore_col in cols:
                         X_val = X_val.drop([ignore_col], axis=1)
+                        X_test = X_test.drop([ignore_col], axis=1)
 
         else:
             return X_train, y_train
 
-        return X_train, X_val, y_train, y_val
+        return X_train, X_val, y_train, y_val, X_test, y_test
 
     def scale_features(self, train_data: pd.DataFrame,
                        scaler,
                        val_data: Optional[pd.DataFrame] = None,
+                       test_data: Optional[pd.DataFrame] = None,
                        per_area: bool = False,
                        identifier: str = "cid") -> Union[pd.DataFrame, pd.DataFrame, Any]:
         """Scales the features according to the specified scaler."""
@@ -265,7 +281,7 @@ class Data(ABC):
         cols = [col for col in train_data.columns if col != identifier]
         if per_area:
             scalers = dict()
-            train_dfs, val_dfs = [], []
+            train_dfs, val_dfs, test_dfs = [], [], []
             for area in train_data[identifier].unique():
                 tmp_train_data = train_data.loc[train_data[identifier] == area]
                 tmp_train_data = tmp_train_data.copy()
@@ -274,21 +290,28 @@ class Data(ABC):
                 tmp_val_data = val_data.loc[val_data[identifier] == area]
                 tmp_val_data = tmp_val_data.copy()
                 tmp_val_data[cols] = scaler.transform(tmp_val_data[cols])
+
+                tmp_test_data = test_data.loc[test_data[identifier] == area]
+                tmp_test_data = tmp_test_data.copy()
+                tmp_test_data[cols] = scaler.transform(tmp_test_data[cols])
+
                 train_dfs.append(tmp_train_data)
                 val_dfs.append(tmp_val_data)
+                test_dfs.append(tmp_test_data)
 
                 scalers[area] = scaler
 
             train_data = pd.concat(train_dfs)
             val_data = pd.concat(val_dfs)
+            test_data = pd.concat(test_dfs)
 
-            return train_data, val_data, scalers
+            return train_data, val_data, test_data, scalers
 
         else:
             if val_data is not None:
                 train_data[cols] = scaler.fit_transform(train_data[cols])
                 val_data[cols] = scaler.transform(val_data[cols])
-                return train_data, val_data, scaler
+                return train_data, val_data, test_data, scaler
             else:
                 train_data[cols] = scaler.transform(train_data[cols])
                 return train_data
@@ -415,29 +438,33 @@ class Data(ABC):
 
 
 
-    def get_data_by_area(self, X_train: pd.DataFrame, X_val: pd.DataFrame,
-                         y_train: pd.DataFrame, y_val: pd.DataFrame,
+    def get_data_by_area(self, X_train: pd.DataFrame, X_val: pd.DataFrame, X_test: pd.DataFrame,
+                         y_train: pd.DataFrame, y_val: pd.DataFrame, y_test: pd.DataFrame,
                          identifier: str = "cid") -> Tuple[
-        Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
+        Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
         """Generates the training and testing frames per area."""
         assert list(X_train[identifier].unique()) == list(X_val[identifier].unique())
 
-        area_X_train, area_X_val, area_y_train, area_y_val = dict(), dict(), dict(), dict()
+        area_X_train, area_X_val, area_X_test, area_y_train, area_y_val, area_y_test = dict(), dict(), dict(), dict(), dict(), dict()
         for area in X_train[identifier].unique():
             # get per area observations
             X_train_area = X_train.loc[X_train[identifier] == area]
             X_val_area = X_val.loc[X_val[identifier] == area]
+            X_test_area = X_test.loc[X_test[identifier] == area]
             y_train_area = y_train.loc[y_train[identifier] == area]
             y_val_area = y_val.loc[y_val[identifier] == area]
+            y_test_area = y_test.loc[y_test[identifier] == area]
 
             area_X_train[area]: pd.DataFrame = X_train_area
             area_X_val[area]: pd.DataFrame = X_val_area
+            area_X_test[area]: pd.DataFrame = X_test_area
             area_y_train[area]: pd.DataFrame = y_train_area
             area_y_val[area]: pd.DataFrame = y_val_area
+            area_y_test[area]: pd.DataFrame = y_test_area
 
-        assert area_X_train.keys() == area_X_val.keys() == area_y_train.keys() == area_y_val.keys()
+        assert area_X_train.keys() == area_X_val.keys() == area_X_test.keys() == area_y_train.keys() == area_y_val.keys() == area_y_test.keys()
 
-        return area_X_train, area_X_val, area_y_train, area_y_val
+        return area_X_train, area_X_val, area_X_test, area_y_train, area_y_val, area_y_test
 
     def get_exogenous_data_by_area(self, exogenous_data_train: pd.DataFrame,
                                    exogenous_data_val: Optional[pd.DataFrame] = None,
@@ -472,16 +499,21 @@ class Data(ABC):
                            y_train: pd.DataFrame,
                            X_val: Optional[pd.DataFrame] = None,
                            y_val: Optional[pd.DataFrame] = None,
+                           X_test: Optional[pd.DataFrame] = None,
+                           y_test: Optional[pd.DataFrame] = None,
                            identifier: str = "cid") -> Union[
-        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame], Tuple[pd.DataFrame, pd.DataFrame]]:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame], Tuple[pd.DataFrame, pd.DataFrame]]:
         """Removes a specified column which describes an area/client, e.g., id."""
         X_train = X_train.drop([identifier], axis=1)
         y_train = y_train.drop([identifier], axis=1)
 
+
         if X_val is not None and y_val is not None:
             X_val = X_val.drop([identifier], axis=1)
+            X_test = X_test.drop([identifier], axis=1)
             y_val = y_val.drop([identifier], axis=1)
-            return X_train, y_train, X_val, y_val
+            y_test = y_test.drop([identifier], axis=1)
+            return X_train, y_train, X_val, y_val, X_test, y_test
         return X_train, y_train
 
     def to_timeseries_rep(self, x: Union[np.ndarray, Dict[Union[str, int], np.ndarray]],
@@ -506,7 +538,7 @@ class Processsing(Data):
 
 
 
-    def get_input_dims(self, X_train, exogenous_data_train):
+    def get_input_dims(self, X_train, exogenous_data_train=None):
         if self.args.model_name == "mlp":
             input_dim = X_train.shape[1] * X_train.shape[2]
         else:
@@ -527,34 +559,38 @@ class Processsing(Data):
         self.df = self.read_data(filter_data=filter_bs)
         self.df = self.handle_nans(train_data=self.df, constant=self.args.nan_constant, identifier=self.args.identifier)
 
-        train_data, val_data = self.to_train_val(self.df)
+        train_data, val_data, test_data = self.to_train_val(self.df)
 
 
         if self.args.outlier_detection is not None:
             train_data = self.handle_outliers(df=train_data, columns=self.args.outlier_columns,
                                               identifier=self.args.identifier, kwargs=self.args.outlier_kwargs)
 
-        X_train, X_val, y_train, y_val = self.to_Xy(train_data=train_data, val_data=val_data,
-                                               targets=self.args.targets)
+        X_train, X_val, y_train, y_val, X_test, y_test = self.to_Xy(train_data=train_data, val_data=val_data, test_data=test_data, targets=self.args.targets)
 
         # scale X
-        X_train, X_val, x_scaler = self.scale_features(train_data=X_train, val_data=X_val,
+        X_train, X_val, X_test, x_scaler = self.scale_features(train_data=X_train, val_data=X_val, test_data=X_test,
                                                   scaler=self.args.x_scaler, identifier=self.args.identifier, per_area=per_area)
         # scale y
-        y_train, y_val, y_scaler = self.scale_features(train_data=y_train, val_data=y_val,
+        y_train, y_val, y_test, y_scaler = self.scale_features(train_data=y_train, val_data=y_val, test_data=y_test,
                                                   scaler=self.args.y_scaler, identifier=self.args.identifier, per_area=per_area)
 
         # generate time lags
         X_train = self.generate_time_lags(X_train, self.args.num_lags)
         X_val = self.generate_time_lags(X_val, self.args.num_lags)
+        X_test = self.generate_time_lags(X_test, self.args.num_lags)
         y_train = self.generate_time_lags(y_train, self.args.num_lags, is_y=True)
         y_val = self.generate_time_lags(y_val, self.args.num_lags, is_y=True)
+        y_test = self.generate_time_lags(y_test, self.args.num_lags, is_y=True)
 
         date_time_df_train = self.time_to_feature(
             X_train, self.args.use_time_features, identifier=self.args.identifier
         )
         date_time_df_val = self.time_to_feature(
             X_val, self.args.use_time_features, identifier=self.args.identifier
+        )
+        date_time_df_test = self.time_to_feature(
+            X_test, self.args.use_time_features, identifier=self.args.identifier
         )
 
         stats_df_train = self.assign_statistics(X_train, self.args.assign_stats, self.args.num_lags,
@@ -577,37 +613,40 @@ class Processsing(Data):
         else:
             exogenous_data_val = None
 
-        return X_train, X_val, y_train, y_val, exogenous_data_train, exogenous_data_val, x_scaler, y_scaler
+        return X_train, X_val, X_test, y_train, y_val, y_test, exogenous_data_train, exogenous_data_val, x_scaler, y_scaler
 
-    def make_postprocessing(self, X_train, X_val, y_train, y_val, exogenous_data_train, exogenous_data_val, x_scaler, y_scaler, fl: bool=False):
+    def make_postprocessing(self, X_train, X_val, X_test, y_train, y_val, y_test, exogenous_data_train, exogenous_data_val, x_scaler, y_scaler, fl: bool=False):
         if X_train[self.args.identifier].nunique() != 1:
-            area_X_train, area_X_val, area_y_train, area_y_val = self.get_data_by_area(X_train, X_val,
-                                                                                  y_train, y_val,
+            area_X_train, area_X_val, area_X_test, area_y_train, area_y_val, area_y_test = self.get_data_by_area(X_train, X_val, X_test,
+                                                                                  y_train, y_val, y_test,
                                                                                   identifier=self.args.identifier)
         else:
-            area_X_train, area_X_val, area_y_train, area_y_val = None, None, None, None
+            area_X_train, area_X_val, area_X_test, area_y_train, area_y_val, area_y_test = None, None, None, None, None, None
         if exogenous_data_train is not None:
             exogenous_data_train, exogenous_data_val = self.get_exogenous_data_by_area(exogenous_data_train,
                                                                               exogenous_data_val)
 
         if area_X_train is not None:
             for area in area_X_train:
-                tmp_X_train, tmp_y_train, tmp_X_val, tmp_y_val = self.remove_identifiers(
-                    area_X_train[area], area_y_train[area], area_X_val[area], area_y_val[area])
+                tmp_X_train, tmp_y_train, tmp_X_val, tmp_y_val, tmp_X_test, tmp_y_test = self.remove_identifiers(
+                    area_X_train[area], area_y_train[area], area_X_val[area], area_y_val[area], area_X_test[area], area_y_test[area])
                 tmp_X_train, tmp_y_train = tmp_X_train.to_numpy(), tmp_y_train.to_numpy()
                 tmp_X_val, tmp_y_val = tmp_X_val.to_numpy(), tmp_y_val.to_numpy()
+                tmp_X_test, tmp_y_test = tmp_X_test.to_numpy(), tmp_y_test.to_numpy()
                 area_X_train[area] = tmp_X_train
                 area_X_val[area] = tmp_X_val
+                area_X_test[area] = tmp_X_test
                 area_y_train[area] = tmp_y_train
                 area_y_val[area] = tmp_y_val
+                area_y_test[area] = tmp_y_test
 
         if exogenous_data_train is not None:
             for area in exogenous_data_train:
                 exogenous_data_train[area] = exogenous_data_train[area].to_numpy()
                 exogenous_data_val[area] = exogenous_data_val[area].to_numpy()
 
-        X_train, y_train, X_val, y_val = self.remove_identifiers(X_train, y_train, X_val, y_val)
-        assert len(X_train.columns) == len(X_val.columns)
+        X_train, y_train, X_val, y_val, X_test, y_test = self.remove_identifiers(X_train, y_train, X_val, y_val, X_test, y_test)
+        assert len(X_train.columns) == len(X_val.columns) == len(X_test.columns)
 
         num_features = len(X_train.columns) // self.args.num_lags
 
@@ -615,14 +654,18 @@ class Processsing(Data):
                                     num_features=num_features)
         X_val = self.to_timeseries_rep(X_val.to_numpy(), num_lags=self.args.num_lags,
                                   num_features=num_features)
+        X_test = self.to_timeseries_rep(X_test.to_numpy(), num_lags=self.args.num_lags,
+                                  num_features=num_features)
 
         if area_X_train is not None:
             area_X_train = self.to_timeseries_rep(area_X_train, num_lags=self.args.num_lags,
                                              num_features=num_features)
             area_X_val = self.to_timeseries_rep(area_X_val, num_lags=self.args.num_lags,
                                            num_features=num_features)
+            area_X_test = self.to_timeseries_rep(area_X_test, num_lags=self.args.num_lags,
+                                           num_features=num_features)
 
-        y_train, y_val = y_train.to_numpy(), y_val.to_numpy()
+        y_train, y_val, y_test = y_train.to_numpy(), y_val.to_numpy(), y_test.to_numpy()
 
         # centralized (all) learning specific
         if not self.args.filter_bs and exogenous_data_train is not None:
@@ -634,5 +677,5 @@ class Processsing(Data):
             exogenous_data_val_combined = np.stack(exogenous_data_val_combined)
             exogenous_data_train["all"] = exogenous_data_train_combined
             exogenous_data_val["all"] = exogenous_data_val_combined
-        return X_train, X_val, y_train, y_val, area_X_train, area_X_val, area_y_train, area_y_val, exogenous_data_train, exogenous_data_val
+        return X_train, X_val, X_test, y_train, y_val, y_test, area_X_train, area_X_val, area_X_test, area_y_train, area_y_val, area_y_test, exogenous_data_train, exogenous_data_val
 

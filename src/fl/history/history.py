@@ -1,8 +1,10 @@
 #TODO{Acho que aqui entraria o log do wandb. Depois pensar em uma forma de integrar esse log}
 
-
+import json
 from typing import Dict, Union, List
-
+from src.utils.functions import mkdir_if_not_exists, save_json_file
+from logging import INFO
+from src.utils.logger import log
 
 class History:
     """We consider 4 loss metrics and 4 evaluation metrics (MSE, MAE, RMSE, R^2, NRMSE). In any case, you can
@@ -34,29 +36,29 @@ class History:
         """Add one local train loss entry."""
         for client in clients_losses:
             if client not in self.local_train_losses:
-                self.local_train_losses[client] = dict()
-            self.local_train_losses[client][fl_round] = clients_losses[client]
+                self.local_train_losses[str(client)] = dict()
+            self.local_train_losses[str(client)][str(fl_round)] = clients_losses[client]
 
     def add_local_train_metrics(self, client_metrics: Dict[str, Dict[str, float]], fl_round: int) -> None:
         """Add one local train metrics entry."""
         for client in client_metrics:
             if client not in self.local_train_metrics:
-                self.local_train_metrics[client] = dict()
-            self.local_train_metrics[client][fl_round] = client_metrics[client]
+                self.local_train_metrics[str(client)] = dict()
+            self.local_train_metrics[str(client)][str(fl_round)] = client_metrics[client]
 
     def add_local_test_loss(self, client_losses: Dict[Union[str, int], float], fl_round: int) -> None:
         """Add one local test loss entry."""
         for client in client_losses:
             if client not in self.local_test_losses:
-                self.local_test_losses[client] = dict()
-            self.local_test_losses[client][fl_round] = client_losses[client]
+                self.local_test_losses[str(client)] = dict()
+            self.local_test_losses[str(client)][str(fl_round)] = client_losses[client]
 
     def add_local_test_metrics(self, client_metrics: Dict[str, Dict[str, float]], fl_round: int) -> None:
         """Add one local test metrics entry."""
         for client in client_metrics:
             if client not in self.local_test_metrics:
-                self.local_test_metrics[client] = dict()
-            self.local_test_metrics[client][fl_round] = client_metrics[client]
+                self.local_test_metrics[str(client)] = dict()
+            self.local_test_metrics[str(client)][str(fl_round)] = client_metrics[client]
 
     def add_global_train_losses(self, averaged_loss: float) -> None:
         """Add one global train loss."""
@@ -79,6 +81,28 @@ class History:
             if key not in self.global_test_metrics:
                 self.global_test_metrics[key] = []
             self.global_test_metrics[key].append(averaged_metrics[key])
+
+    def save_in_json(self):
+        mkdir_if_not_exists('etc/')
+        mkdir_if_not_exists('etc/results/')
+
+        log(INFO, f"Saving global test results...")
+        save_json_file(f'etc/results/global_test_losses.json', self.global_test_losses)
+        save_json_file(f'etc/results/global_test_metrics.json', self.global_test_metrics)
+
+        log(INFO, f"Saving global train results...")
+        save_json_file(f'etc/results/global_train_losses.json', self.global_train_losses)
+        save_json_file(f'etc/results/global_train_metrics.json', self.global_train_metrics)
+
+        log(INFO, f"Saving local test results...")
+        save_json_file(f'etc/results/local_test_losses.json', self.local_test_losses)
+        save_json_file(f'etc/results/local_test_metrics.json', self.local_test_metrics)
+
+        log(INFO, f"Saving local train results...")
+        save_json_file(f'etc/results/local_train_losses.json', self.local_train_losses)
+        save_json_file(f'etc/results/local_train_metrics.json', self.local_train_metrics)
+        log(INFO, f"Saving process done...")
+
 
     def __repr__(self) -> str:
         rep = ""

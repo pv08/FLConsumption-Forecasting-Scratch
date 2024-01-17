@@ -1,6 +1,7 @@
 import torch as T
 from src.federated_training import FederatedTraining
 from argparse import ArgumentParser
+from src.utils.functions import plot_global_losses, plot_global_metrics, plot_local_train_rounds
 
 
 def main():
@@ -21,10 +22,10 @@ def main():
 
     parser.add_argument("--criterion", type=str, default='mse')
     parser.add_argument("--fl_rounds", type=int, default=10)
-    parser.add_argument("--fraction", type=float, default=.10)
+    parser.add_argument("--fraction", type=float, default=.25)
     parser.add_argument("--aggregation", type=str, default="fedavg")
     parser.add_argument("--model_name", type=str, default='cnn', help='["mlp", "rnn" ,"lstm", "gru", "cnn", "da_encoder_decoder"]')
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--optimizer", type=str, default='adam')
     parser.add_argument("--batch_size", type=int, default=128)
@@ -53,6 +54,13 @@ def main():
 
     trainer = FederatedTraining(args=args)
     global_model, history = trainer.fit(local_train_params=local_train_params)
+    history.save_in_json()
+    print(history)
+    plot_global_losses(history.global_test_losses)
+    plot_global_metrics(history.global_test_metrics)
+    plot_local_train_rounds(history.local_test_metrics)
+
+
 
 if __name__ == "__main__":
     main()

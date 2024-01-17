@@ -1,3 +1,4 @@
+import wandb
 import copy
 import math
 import numpy as np
@@ -139,7 +140,10 @@ class Trainers:
     def train(cls, model: nn.Module, cid: str, train_loader: DataLoader, test_loader: DataLoader, epochs: int=10, optimizer: str="adam",
               lr: float="1e-3", reg1: float=0, reg2: float=0, max_grad_norm: float=0, criterion: str="mse",
               early_stopping: bool=False, patience: int=50, plot_history: bool=False, device: str="cuda", fedprox_mu: float=0.0,
-              log_per: int=1, use_carbontracker: bool=False):
+              log_per: int=1, use_carbontracker: bool=False, fl_round=0):
+        wandb_logger = wandb.init(project='FL-ConsumptionForecasting-Scratch',
+                                       tags=['centralized', 'consumption'], group='Centralized', name=f"FL_Round_{fl_round}")
+
         best_model, best_loss, best_epoch = None, -1, -1
         train_loss_history, train_rmse_history = [], []
         test_loss_history, test_rmse_history = [], []
@@ -191,6 +195,7 @@ class Trainers:
             test_loss, test_mse, test_rmse, test_mae, test_r2, test_nrmse = cls.test(model, test_loader,
                                                                                  criterion, device)
             log(INFO, f"Participant: {cid} | Epoch {epoch + 1}/{epochs} | [Train]: loss {train_loss}, mse: {train_mse} | [Test]: loss {test_loss}, mse: {test_mse}")
+            wandb_logger.log({'cid': cid, 'epoch': epoch + 1, 'train_loss': train_loss, 'train_mse': train_mse, 'test_loss': test_loss, 'test_mse': test_mse})
             train_loss_history.append(train_mse)
             train_rmse_history.append(train_rmse)
             test_loss_history.append(test_mse)

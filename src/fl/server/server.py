@@ -27,9 +27,10 @@ class Server:
                  val_loader: Optional[DataLoader]=None,
                  local_params_fn: Optional[Callable]=None,
                  server_model=None,
-                 server_config: Optional[OrderedDict[str, any]]=None):
+                 server_config: Optional[OrderedDict[str, any]]=None, logger=None):
 
         self.global_model = None
+        self.logger = logger
         self.best_model = None
         self.server_model = server_model
         self.best_loss, self.best_epoch = np.inf, -1
@@ -179,7 +180,7 @@ class Server:
                 num_test_examples.append(num_test_instances)
                 test_losses[cid] = test_loss
                 test_metrics[cid] = test_eval_metrics
-
+                self.logger.log({'fl_round': fl_round, 'cid': cid,'global_MSE': test_metrics[cid]['MSE']})
                 pbar.set_postfix({'cid': cid, 'metrics': test_metrics[cid]})
 
         history.add_global_train_losses(self.weighted_loss(num_train_examples, list(train_losses.values())))
