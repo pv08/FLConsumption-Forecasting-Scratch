@@ -44,7 +44,7 @@ def plot_train_curve(train_history, test_history, title, fig_name):
     plt.plot(train_history, label='Train')
     plt.plot(test_history, label='Test')
     plt.legend()
-    plt.show()
+    
     mkdir_if_not_exists('etc/')
     mkdir_if_not_exists('etc/results/')
     plt.savefig(f'etc/results/{fig_name}.png')
@@ -59,7 +59,7 @@ def plot_global_losses(values: List[float]):
     plt.plot(values, marker='^')
     plt.xlabel('Round')
     plt.ylabel('Loss')
-    plt.show()
+    
     plt.savefig(f'etc/results/imgs/global_loss.png')
     plt.close()
 
@@ -74,7 +74,7 @@ def plot_global_metrics(history: Dict[str, List[np.float64]]):
         plt.plot(value, marker='^')
         plt.xlabel('Round')
         plt.ylabel('Error')
-        plt.show()
+        
         plt.savefig(f'etc/results/imgs/{metric}.png')
         plt.close()
 
@@ -90,9 +90,21 @@ def plot_local_train_rounds(history):
     plt.xlabel('Participants')
     plt.ylabel('Training times')
     plt.xticks(rotation=45)
-    plt.show()
+    
     mkdir_if_not_exists('etc/')
     mkdir_if_not_exists('etc/results/')
     plt.savefig(f'etc/results/imgs/training_times.png')
+    plt.close()
+
+def plot_test_prediction(y_true, y_pred, cid):
+    mkdir_if_not_exists('etc/')
+    mkdir_if_not_exists('etc/results/')
+    mkdir_if_not_exists('etc/results/imgs/')
+    mkdir_if_not_exists('etc/results/imgs/preds/')
+    plt.title(f"Prediction of {cid}")
+    plt.plot(y_true, label='True')
+    plt.plot(y_pred, label='Predicted')
+    plt.legend()
+    plt.savefig(f'etc/results/imgs/preds/{cid}_pred.png')
     plt.close()
 

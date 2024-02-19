@@ -161,9 +161,9 @@ class Data(ABC):
             test_data = pd.concat(test_data)
             log(INFO, "Observations info using all data")
             log(INFO, f"\tTotal number of samples:  {len(train_data) + len(val_data) + len(test_data)}")
-            log(INFO, f"\tNumber of samples for training: {len(train_data)}")
-            log(INFO, f"\tNumber of samples for validation:  {len(val_data)}")
-            log(INFO, f"\tNumber of samples for testing:  {len(test_data)}")
+            log(INFO, f"\tNumber of samples for training: {len(train_data)} - {100*len(train_data)/(len(train_data) + len(val_data) + len(test_data))}%")
+            log(INFO, f"\tNumber of samples for validation:  {len(val_data)} - {100*len(val_data)/(len(train_data) + len(val_data) + len(test_data))}%")
+            log(INFO, f"\tNumber of samples for testing:  {len(test_data)}- {100*len(test_data)/(len(train_data) + len(val_data) + len(test_data))}%")
         else:
             num_samples_train = math.ceil(train_size * len(df))
             train_data = df[:num_samples_train]

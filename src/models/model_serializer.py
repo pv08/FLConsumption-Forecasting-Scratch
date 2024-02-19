@@ -6,7 +6,7 @@ from collections import OrderedDict
 from src.utils.functions import mkdir_if_not_exists
 
 class ModelSerializer:
-    def __init__(self, model, path: str):
+    def __init__(self, model, path: str, x_scaler=None, y_scaler=None):
 
         mkdir_if_not_exists(f"etc/")
         mkdir_if_not_exists(f"etc/ckpt/")
@@ -14,7 +14,36 @@ class ModelSerializer:
         mkdir_if_not_exists(f"etc/ckpt/client/")
         self.model = model
         self.path = path
+        self.x_scaler = x_scaler
+        self.y_scaler = y_scaler
 
+
+    def load(self):
+        state_dict = OrderedDict()
+        x_scaler, y_scaler = OrderedDict(), OrderedDict()
+        with h5py.File(self.path, "r") as f:
+            keys = list(f.keys())
+            assert "model_weights" in keys
+            # assert "x_scaler" in keys
+            # assert "y_scaler" in keys
+            model_weights = f["model_weights"]
+            named_params = model_weights.keys()
+            for k in named_params:
+                state_dict[k] = model_weights[k][:]
+
+            # x_scaler_state = f["x_scaler"]
+            # named_params = x_scaler_state.keys()
+            # for k in named_params:
+            #     print(k)
+            #     x_scaler[k] = x_scaler_state[k][:]
+            #
+            # y_scaler_state = f["y_scaler"]
+            # named_params = y_scaler_state.keys()
+            # for k in named_params:
+            #     y_scaler[k] = y_scaler_state[k][:]
+
+        state_dict = self.state_to_torch(state_dict)
+        return state_dict
 
     def save(self, name):
         np_weights = self.state_to_numpy(self.model.state_dict())
@@ -42,3 +71,17 @@ class ModelSerializer:
         for k, v in model_state.items():
             np_ordered_dict[k] = v.cpu().numpy().astype(np.float64)
         return np_ordered_dict
+
+    @staticmethod
+    def state_to_torch(model_state):
+        assert type(model_state) in (dict, OrderedDict), \
+            f"Model state must be of type dictionary. Received {type(model_state)}"
+        k = next(iter(model_state))
+        assert type(model_state[k]) in (T.tensor, T.Tensor, np.ndarray), \
+            f"Model weights must be of type torch.tensor or numpy.ndarray. Received {type(model_state[k])}"
+        if type(model_state[k]) in (T.tensor, T.Tensor):
+            return model_state
+        torch_ordered_dict = OrderedDict()
+        for k, v in model_state.items():
+            torch_ordered_dict[k] = T.tensor(v).float()
+        return torch_ordered_dict
